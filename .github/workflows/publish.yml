@@ -1,0 +1,25 @@
+name: Publish Match 3 ROCm Image
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: imjasonh/setup-crane@v0.4
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: |
+          mkdir -p rootfs/app rootfs/app/output rootfs/app/corpus rootfs/models
+          cp app.py rag_engine.py requirements.txt Dockerfile README.md rootfs/app/
+          chmod +x rootfs/app/app.py
+          tar -C rootfs -cf layer.tar .
+          BASE="rocm/pytorch:rocm10.0_ubuntu26.04_py3.14_pytorch_release_2.13.0"
+          if ! crane manifest "$BASE" >/dev/null 2>&1; then BASE="rocm/pytorch:latest"; fi
+          TARGET="ghcr.io/erix-12/rocm-corpus-rag:latest"
+          crane append -b "$BASE" -f layer.tar -t "$TARGET"
+          crane mutate "$TARGET" --workdir /app --cmd "tail -f /dev/null"
